@@ -25,7 +25,9 @@ def affine_forward(x, w, b):
     # TODO: Implement the affine forward pass. Store the result in out. You   #
     # will need to reshape the input into rows.                               #
     ###########################################################################
-    pass
+    x_s = x.reshape(x.shape[0], -1)
+    out = x_s.dot(w)
+    out += b
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -53,7 +55,9 @@ def affine_backward(dout, cache):
     ###########################################################################
     # TODO: Implement the affine backward pass.                               #
     ###########################################################################
-    pass
+    dx = dout.dot(w.T).reshape(x.shape)
+    dw = x.reshape(x.shape[0], -1).T.dot(dout)
+    db = dout.sum(axis=0)#np.ones(shape=b.shape)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -75,7 +79,7 @@ def relu_forward(x):
     ###########################################################################
     # TODO: Implement the ReLU forward pass.                                  #
     ###########################################################################
-    pass
+    out = np.where(x < 0, 0, x)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -98,7 +102,7 @@ def relu_backward(dout, cache):
     ###########################################################################
     # TODO: Implement the ReLU backward pass.                                 #
     ###########################################################################
-    pass
+    dx = np.where(x < 0, 0, dout.reshape(dx))
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -522,13 +526,16 @@ def svm_loss(x, y):
     """
     N = x.shape[0]
     correct_class_scores = x[np.arange(N), y]
-    margins = np.maximum(0, x - correct_class_scores[:, np.newaxis] + 1.0)
-    margins[np.arange(N), y] = 0
+    margins = np.maximum(0, x - correct_class_scores[:, np.newaxis] + 1.0)  # считаем отступ по всем классам
+    margins[np.arange(N), y] = 0                                            # убираем отступ на положительном классе
     loss = np.sum(margins) / N
-    num_pos = np.sum(margins > 0, axis=1)
+
+    num_pos = np.sum(margins > 0, axis=1)                                   # считаем число неправильных классов...
+                                                                            # ...с положительным отсутпом
     dx = np.zeros_like(x)
     dx[margins > 0] = 1
-    dx[np.arange(N), y] -= num_pos
+    dx[np.arange(N), y] -= num_pos                                  # штрафуем правильный класс за каждый...
+                                                                    # ...неправильный класс с положительным отступом
     dx /= N
     return loss, dx
 
@@ -547,13 +554,15 @@ def softmax_loss(x, y):
     - loss: Scalar giving the loss
     - dx: Gradient of the loss with respect to x
     """
-    shifted_logits = x - np.max(x, axis=1, keepdims=True)
-    Z = np.sum(np.exp(shifted_logits), axis=1, keepdims=True)
+    shifted_logits = x - np.max(x, axis=1, keepdims=True)               # смещаем, чтобы избежать переполнения.
+
+    Z = np.sum(np.exp(shifted_logits), axis=1, keepdims=True)           # forward pass
     log_probs = shifted_logits - np.log(Z)
     probs = np.exp(log_probs)
     N = x.shape[0]
     loss = -np.sum(log_probs[np.arange(N), y]) / N
-    dx = probs.copy()
+
+    dx = probs.copy()                                                   # grad
     dx[np.arange(N), y] -= 1
     dx /= N
     return loss, dx
