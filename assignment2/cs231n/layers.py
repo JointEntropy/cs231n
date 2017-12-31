@@ -172,7 +172,20 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         # variance, storing your result in the running_mean and running_var   #
         # variables.                                                          #
         #######################################################################
-        pass
+
+        sample_mean = x.mean(axis=0)
+        sample_var = (1/N*((x-sample_mean)**2).sum(axis=0))**0.5#x.std(axis=0)
+
+        resid = x - sample_mean
+        x_est = resid / sample_var
+        out = gamma * x_est + beta
+
+        # Обновляем скользящие значения для будущего backward pass.
+        running_mean = momentum * running_mean + (1-momentum) * sample_mean
+        running_var = momentum * running_var + (1 - momentum) * sample_var
+        cache = sample_var, x_est, gamma, resid
+
+        #cache = x_est, gamma, resid, 1/sample_var, sample_var
         #######################################################################
         #                           END OF YOUR CODE                          #
         #######################################################################
@@ -183,7 +196,8 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         # then scale and shift the normalized data using gamma and beta.      #
         # Store the result in the out variable.                               #
         #######################################################################
-        pass
+        x_est = (x - running_mean)/running_var
+        out = gamma*x_est + beta
         #######################################################################
         #                          END OF YOUR CODE                           #
         #######################################################################
@@ -193,7 +207,6 @@ def batchnorm_forward(x, gamma, beta, bn_param):
     # Store the updated running means back into bn_param
     bn_param['running_mean'] = running_mean
     bn_param['running_var'] = running_var
-
     return out, cache
 
 
@@ -215,14 +228,33 @@ def batchnorm_backward(dout, cache):
     - dbeta: Gradient with respect to shift parameter beta, of shape (D,)
     """
     dx, dgamma, dbeta = None, None, None
+
+    sigma, x_est, gamma, resid = cache
+
+    numerator = t1 = resid
+    denominator = sigma
+    t3=sigma**2
     ###########################################################################
     # TODO: Implement the backward pass for batch normalization. Store the    #
     # results in the dx, dgamma, and dbeta variables.                         #
     ###########################################################################
-    pass
-    ###########################################################################
-    #                             END OF YOUR CODE                            #
-    ###########################################################################
+    m,D = x_est.shape
+
+    dbeta = dout.sum(axis=0)
+    dgamma = (x_est * dout).sum(axis=0)
+
+    dmul = dout
+    ddiv = gamma*dmul
+
+    dnumerator = 1/denominator*ddiv
+    ddenominator = ((numerator * (-1/denominator**2)) * ddiv).sum(axis=0)
+    dt3 = 0.5 * (1/np.sqrt(t3)) * ddenominator
+
+    dt2 = 1/m*np.ones(shape=(m, D))*dt3
+    dt1 = 2*t1*dt2
+
+    dmu = (-dt1 - dnumerator).sum(axis=0)
+    dx = dt1 + dnumerator + 1/m*dmu
 
     return dx, dgamma, dbeta
 
@@ -241,6 +273,7 @@ def batchnorm_backward_alt(dout, cache):
     Inputs / outputs: Same as batchnorm_backward
     """
     dx, dgamma, dbeta = None, None, None
+    sigma, x_est, gamma, resid = cache
     ###########################################################################
     # TODO: Implement the backward pass for batch normalization. Store the    #
     # results in the dx, dgamma, and dbeta variables.                         #
@@ -249,7 +282,13 @@ def batchnorm_backward_alt(dout, cache):
     # should be able to compute gradients with respect to the inputs in a     #
     # single statement; our implementation fits on a single 80-character line.#
     ###########################################################################
-    pass
+    m = x_est.shape[0]
+
+    dbeta = dout.sum(axis=0)
+    dgamma = (x_est * dout).sum(axis=0)
+
+    # Считаем dx
+    dx = ((gamma*(m-1))/(sigma*m)) * (1-(resid**2)/(m*sigma**2)) * dout
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################

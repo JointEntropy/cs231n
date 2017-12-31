@@ -183,6 +183,9 @@ class FullyConnectedNet(object):
         for i, hidden_dim in enumerate(hidden_dims):
             self.params['W{}'.format(i+1)] = np.random.normal(0, weight_scale, size=(prev_hidden_dim, hidden_dim))
             self.params['b{}'.format(i+1)] = np.zeros(shape=hidden_dim)
+            if use_batchnorm:
+                self.params['gamma{}'.format(i+1)] = np.ones(shape=hidden_dim)
+                self.params['beta{}'.format(i+1)] = np.zeros(shape=hidden_dim)
             prev_hidden_dim = hidden_dim
         self.params['W{}'.format(self.num_layers)] = np.random.normal(0, weight_scale,
                                                                        size=(prev_hidden_dim, num_classes))
@@ -247,8 +250,14 @@ class FullyConnectedNet(object):
         for i in range(self.num_layers-1):
             hidden_fc, hfc_cache = affine_forward(in_, self.params['W{}'.format(i+1)],
                                                   self.params['b{}'.format(i+1)])                       # affine
-            hidden_relu, hr_cache = relu_forward(hidden_fc)                                             # relu
             cache['hfc{}'.format(i + 1)] = hfc_cache
+            if self.use_batchnorm:
+                hidden_bn, bn_cache = cache['hbn{}'.format(i+1)] = batchnorm_forward(hidden_fc,
+                                                                             self.params['gamma{}'.format(i+1)],
+                                                                             self.params['beta{}'.format(i+1)],
+                                                                            self.bn_params[i])
+                cache['hbn{}'.format(i+1)] = bn_cache
+            hidden_relu, hr_cache = relu_forward(hidden_fc if not self.use_batchnorm else hidden_bn)    # relu
             cache['hr{}'.format(i + 1)] = hr_cache
             in_ = hidden_relu
         out, out_cache = affine_forward(in_, self.params['W{}'.format(self.num_layers)],
@@ -291,9 +300,15 @@ class FullyConnectedNet(object):
         for i in range(self.num_layers-1, 0, -1):
             l_num = str(i)
             dout = relu_backward(dout, cache['hr'+l_num])
+            if self.use_batchnorm:
+                dout, dgamma,dbeta = batchnorm_backward(dout, cache['hbn{}'.format(l_num)])
+                grads['gamma'+l_num] = dgamma
+                grads['beta' + l_num] = dbeta
             dout, dW_out, db_out = affine_backward(dout, cache['hfc'+l_num])
+
             grads['W'+l_num] = dW_out + (self.reg * cache['hfc'+l_num][1])
             grads['b'+l_num] = db_out
+
 
         ############################################################################
         #                             END OF YOUR CODE                             #
