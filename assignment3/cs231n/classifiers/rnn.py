@@ -137,7 +137,22 @@ class CaptioningRNN(object):
         # defined above to store loss and gradients; grads[k] should give the      #
         # gradients for self.params[k].                                            #
         ############################################################################
-        pass
+        # forward
+        a = features.dot(W_proj) + b_proj                                # (1) конвертнули признаки изображения в h0
+        e, embed_cache = word_embedding_forward(captions_in, W_embed)    # (2) превратили слова в вектора
+        if self.cell_type == 'rnn':
+            rnn_out, rnn_cache = rnn_forward(e, a, Wx, Wh, b)     # (3) генерируем цепочки состояний h(выдаваемых слов)
+        elif self.cell_type == 'lstm':
+            raise NotImplementedError
+        ta_out, ta_cache = temporal_affine_forward(rnn_out, W_vocab, b_vocab)   # (4) получаем цепочки слова
+        loss, grad = temporal_softmax_loss(ta_out, captions_out, mask)          # (5) считаем loss
+
+        # backward
+        dout, grads['W_vocab'], grads['b_vocab'] = temporal_affine_backward(grad, ta_cache)
+        dout, da, grads['Wx'], grads['Wh'], grads['b'] = rnn_backward(dout, rnn_cache)
+        grads['W_embed'] = word_embedding_backward(dout, embed_cache)
+        grads['W_proj'] = features.T.dot(da) # da shape = N, H;  features = N, D- >  W_proj shape = D, H
+        grads['b_proj'] = da.sum(axis=0)
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -199,7 +214,15 @@ class CaptioningRNN(object):
         # functions; you'll need to call rnn_step_forward or lstm_step_forward in #
         # a loop.                                                                 #
         ###########################################################################
-        pass
+        h = h0 = features.dot(W_proj)+b_proj
+        start_token = self._start
+        x = x0 = W_embed[start_token]
+        captions[:, 0] = start_token
+        for i in range(max_length-1):
+            next_h, _ = rnn_step_forward(x, h, Wx, Wh, b)
+            scores, _ = affine_forward(next_h, W_vocab, b_vocab)
+            captions[:, i+1] = scores.argmax(axis=1)
+            h = next_h
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
